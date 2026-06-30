@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "global": { ".read": true, ".write": true },
+    "groups": {
+      "$gid": { ".read": true, ".write": true }
+    },
+    "meta": { ".read": true, ".write": true },
+    "topics": {
+      ".read": true,
+      ".write": true,
+      "$tid": { ".read": true, ".write": true }
+    },
+    "canvas": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

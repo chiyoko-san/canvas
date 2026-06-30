@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>世界をひとつの絵にする</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#ffffff; --surface2:#f0f1f4;
+    --text:#1d1d22; --muted:#6b6b76; --hint:#9a9aa4;
+    --accent:#ff9500; --accent-soft:#fff0db;
+    --border:#e6e7ec; --border2:#dcdde3;
+    --shadow:0 1px 3px rgba(20,20,40,0.06),0 1px 2px rgba(20,20,40,0.04);
+    --shadow-lg:0 4px 16px rgba(20,20,40,0.10);
+    --radius:18px; --radius-sm:12px;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    font-size:16px; line-height:1.5; overscroll-behavior:none; }
+  .wrap { max-width:520px; margin:0 auto; padding:16px 12px 24px; }
+
+  .title { text-align:center; margin-bottom:12px; }
+  .title h1 { font-size:20px; font-weight:700; margin:0; letter-spacing:-0.01em; }
+  .title .sub { font-size:12px; color:var(--muted); margin:5px 0 0; }
+
+  .statbar { display:flex; gap:8px; margin-bottom:12px; }
+  .stat { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:9px 10px; text-align:center; box-shadow:var(--shadow); }
+  .stat .k { font-size:10px; color:var(--muted); margin:0 0 2px; }
+  .stat .v { font-size:15px; font-weight:700; margin:0; font-variant-numeric:tabular-nums; }
+
+  /* キャンバス */
+  .canvas-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:8px; margin-bottom:12px; overflow:hidden; position:relative; touch-action:none; }
+  #canvas { display:block; width:100%; image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#fff; border-radius:8px; cursor:crosshair; touch-action:none; }
+  .canvas-hint { position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    background:rgba(29,29,34,0.8); color:#fff; font-size:11px; padding:5px 12px; border-radius:999px;
+    pointer-events:none; opacity:0; transition:opacity 0.3s; white-space:nowrap; }
+  .canvas-hint.show { opacity:1; }
+
+  .zoom-row { display:flex; gap:8px; justify-content:center; margin-bottom:14px; }
+  .zoom-btn { width:44px; height:36px; border-radius:9px; border:1px solid var(--border2);
+    background:var(--surface); color:var(--text); font-size:18px; font-weight:700; cursor:pointer; box-shadow:var(--shadow); }
+  .zoom-btn:active { background:var(--surface2); }
+  .zoom-label { display:flex; align-items:center; font-size:12px; color:var(--muted); padding:0 6px; }
+
+  /* パレット */
+  .palette-block { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:14px; }
+  .palette-block h3 { font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; }
+  .palette { display:grid; grid-template-columns:repeat(8,1fr); gap:8px; }
+  .swatch { aspect-ratio:1; border-radius:9px; cursor:pointer; border:2px solid transparent;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08); transition:transform 0.06s; }
+  .swatch:active { transform:scale(0.92); }
+  .swatch.active { border-color:var(--text); transform:scale(1.06); box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08),0 2px 8px rgba(0,0,0,0.15); }
+
+  .cooldown-bar { margin-top:14px; }
+  .cd-head { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+  .cd-head .k { color:var(--muted); font-weight:600; }
+  .cd-head .v { color:var(--accent); font-weight:700; font-variant-numeric:tabular-nums; }
+  .cd-track { height:8px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+  .cd-track > div { height:100%; background:var(--accent); width:100%; transition:width 0.3s; }
+
+  .status { text-align:center; font-size:12px; color:var(--hint); margin:14px 0 0; min-height:16px; }
+  .foot { text-align:center; font-size:11px; color:var(--hint); margin-top:18px; line-height:1.7; }
+
+  .toast { position:fixed; left:50%; top:18px; transform:translateX(-50%) translateY(-100px);
+    background:var(--text); color:#fff; font-weight:600; padding:11px 20px; border-radius:999px;
+    font-size:14px; opacity:0; transition:all 0.4s cubic-bezier(.2,.8,.2,1); z-index:60; pointer-events:none;
+    max-width:90%; text-align:center; box-shadow:var(--shadow-lg); }
+  .toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<div class="wrap">
+  <div class="title">
+    <h1>🎨 世界をひとつの絵にする</h1>
+    <p class="sub">全人類で1マスずつ塗る共有キャンバス。30秒に1マス。</p>
+  </div>
+
+  <div class="statbar">
+    <div class="stat"><p class="k">塗られたマス</p><p class="v" id="filledCount">—</p></div>
+    <div class="stat"><p class="k">あなたの貢献</p><p class="v" id="myCount">0</p></div>
+    <div class="stat"><p class="k">キャンバス</p><p class="v">50×50</p></div>
+  </div>
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="canvas" width="50" height="50"></canvas>
+    <div class="canvas-hint" id="canvasHint">タップで塗る・2本指で拡大/移動</div>
+  </div>
+
+  <div class="zoom-row">
+    <button class="zoom-btn" id="zoomOut">−</button>
+    <span class="zoom-label" id="zoomLabel">1.0×</span>
+    <button class="zoom-btn" id="zoomIn">＋</button>
+    <button class="zoom-btn" id="zoomReset" style="width:auto;padding:0 12px;font-size:13px;">リセット</button>
+  </div>
+
+  <div class="palette-block">
+    <h3>🎨 色をえらぶ</h3>
+    <div class="palette" id="palette"></div>
+
+    <div class="cooldown-bar">
+      <div class="cd-head">
+        <span class="k">次に塗れるまで</span>
+        <span class="v" id="cdText">塗れます！</span>
+      </div>
+      <div class="cd-track"><div id="cdFill"></div></div>
+    </div>
+  </div>
+
+  <div class="status" id="status">接続中…</div>
+  <p class="foot">
+    1マス塗るごとに30秒のクールダウン。<br>
+    みんなで譲り合って、ひとつの絵を完成させよう。
+  </p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue, update, runTransaction, get }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// ===== 自分のFirebase設定に書き換える（THE BUTTONと同じでOK） =====
+const firebaseConfig = {
+  apiKey: "THE_BUTTONと同じAPIキーをここに貼る",
+  authDomain: "one-button-7ab53.firebaseapp.com",
+  databaseURL: "https://one-button-7ab53-default-rtdb.firebaseio.com",
+  projectId: "one-button-7ab53",
+};
+// =================================================================
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const $ = id => document.getElementById(id);
+
+const SIZE = 50;
+const COOLDOWN_MS = 30000;
+const PALETTE = [
+  "#ffffff","#e4e4e4","#888888","#222222",
+  "#ffa7d1","#e50000","#e59500","#a06a42",
+  "#e5d900","#94e044","#02be01","#00d3dd",
+  "#0083c7","#0000ea","#cf6ee4","#820080"
+];
+// 背景デフォルト色（白=0番）
+const DEFAULT_COLOR = 0;
+
+let pixels = new Uint8Array(SIZE*SIZE).fill(DEFAULT_COLOR);
+let selectedColor = 5; // 赤
+let myCount = parseInt(localStorage.getItem("wc_mycount")||"0");
+let lastPlaced = parseInt(localStorage.getItem("wc_lastplaced")||"0");
+
+const canvas = $("canvas");
+const ctx = canvas.getContext("2d");
+
+// ---- 描画 ----
+function draw(){
+  const img = ctx.createImageData(SIZE,SIZE);
+  for(let i=0;i<pixels.length;i++){
+    const hex = PALETTE[pixels[i]]||"#ffffff";
+    const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    img.data[i*4]=r; img.data[i*4+1]=g; img.data[i*4+2]=b; img.data[i*4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  const filled = pixels.reduce((n,c)=>n+(c!==DEFAULT_COLOR?1:0),0);
+  $("filledCount").textContent = filled.toLocaleString();
+}
+
+// ---- パレット ----
+function buildPalette(){
+  const p=$("palette"); p.innerHTML="";
+  PALETTE.forEach((hex,i)=>{
+    const sw=document.createElement("div");
+    sw.className="swatch"+(i===selectedColor?" active":"");
+    sw.style.background=hex; sw.dataset.i=i;
+    sw.addEventListener("click",()=>{ selectedColor=i; buildPalette(); });
+    p.appendChild(sw);
+  });
+}
+
+// ---- ズーム・パン ----
+let scale=1, originX=0, originY=0;
+function applyTransform(){
+  canvas.style.transform=`translate(${originX}px,${originY}px) scale(${scale})`;
+  canvas.style.transformOrigin="0 0";
+  $("zoomLabel").textContent=scale.toFixed(1)+"×";
+}
+$("zoomIn").addEventListener("click",()=>{ scale=Math.min(8,scale*1.4); applyTransform(); });
+$("zoomOut").addEventListener("click",()=>{ scale=Math.max(1,scale/1.4); if(scale===1){originX=0;originY=0;} applyTransform(); });
+$("zoomReset").addEventListener("click",()=>{ scale=1;originX=0;originY=0; applyTransform(); });
+
+// ---- クールダウン ----
+function canPlace(){ return Date.now()-lastPlaced >= COOLDOWN_MS; }
+function updateCooldown(){
+  const left = COOLDOWN_MS-(Date.now()-lastPlaced);
+  if(left<=0){ $("cdText").textContent="塗れます！"; $("cdFill").style.width="100%"; }
+  else { $("cdText").textContent=Math.ceil(left/1000)+"秒"; $("cdFill").style.width=(100-left/COOLDOWN_MS*100)+"%"; }
+}
+
+// ---- 座標変換（タップ→マス） ----
+function eventToCell(clientX,clientY){
+  const rect=canvas.getBoundingClientRect();
+  const x=Math.floor((clientX-rect.left)/rect.width*SIZE);
+  const y=Math.floor((clientY-rect.top)/rect.height*SIZE);
+  if(x<0||x>=SIZE||y<0||y>=SIZE) return null;
+  return y*SIZE+x;
+}
+
+// ---- 塗る ----
+function place(idx){
+  if(idx==null) return;
+  if(!canPlace()){ toast("⏳ クールダウン中"); return; }
+  if(pixels[idx]===selectedColor){ toast("同じ色です"); return; }
+  pixels[idx]=selectedColor;
+  draw();
+  lastPlaced=Date.now(); localStorage.setItem("wc_lastplaced",lastPlaced);
+  myCount++; localStorage.setItem("wc_mycount",myCount); $("myCount").textContent=myCount.toLocaleString();
+  updateCooldown();
+  // Firebaseに差分だけ書き込む（pixels/{idx} = color）
+  const u={}; u["pixels/"+idx]=selectedColor;
+  update(ref(db,"canvas"), u).catch(()=>{});
+  // 貢献カウンタ
+  runTransaction(ref(db,"canvas/totalPlaced"), n=>(n||0)+1).catch(()=>{});
+}
+
+// ---- タッチ/マウス操作（タップ=塗る、2本指=ズーム/パン） ----
+let touchMode=null, startDist=0, startScale=1, startX=0,startY=0,startOX=0,startOY=0, moved=false;
+const wrap=$("canvasWrap");
+
+wrap.addEventListener("touchstart",e=>{
+  if(e.touches.length===1){ touchMode="tap"; moved=false;
+    startX=e.touches[0].clientX; startY=e.touches[0].clientY; }
+  else if(e.touches.length===2){ touchMode="pinch";
+    startDist=dist(e.touches); startScale=scale;
+    const m=mid(e.touches); startX=m.x; startY=m.y; startOX=originX; startOY=originY; }
+},{passive:false});
+
+wrap.addEventListener("touchmove",e=>{
+  e.preventDefault();
+  if(touchMode==="pinch"&&e.touches.length===2){
+    const d=dist(e.touches); scale=Math.max(1,Math.min(8,startScale*(d/startDist)));
+    const m=mid(e.touches);
+    originX=startOX+(m.x-startX); originY=startOY+(m.y-startY);
+    if(scale===1){originX=0;originY=0;}
+    applyTransform();
+  } else if(touchMode==="tap"&&e.touches.length===1){
+    const dx=e.touches[0].clientX-startX, dy=e.touches[0].clientY-startY;
+    if(Math.abs(dx)>6||Math.abs(dy)>6) moved=true;
+    if(scale>1){ // 拡大中は1本指でパン
+      originX+=dx; originY+=dy; startX=e.touches[0].clientX; startY=e.touches[0].clientY; applyTransform(); moved=true;
+    }
+  }
+},{passive:false});
+
+wrap.addEventListener("touchend",e=>{
+  if(touchMode==="tap"&&!moved){ place(eventToCell(startX,startY)); }
+  touchMode=null;
+},{passive:false});
+
+// マウス（PC）
+let mouseDown=false, mMoved=false, mStartX=0,mStartY=0;
+canvas.addEventListener("mousedown",e=>{ mouseDown=true; mMoved=false; mStartX=e.clientX; mStartY=e.clientY; });
+window.addEventListener("mousemove",e=>{ if(mouseDown&&(Math.abs(e.clientX-mStartX)>4||Math.abs(e.clientY-mStartY)>4)) mMoved=true; });
+canvas.addEventListener("mouseup",e=>{ if(mouseDown&&!mMoved){ place(eventToCell(e.clientX,e.clientY)); } mouseDown=false; });
+
+function dist(t){ const dx=t[0].clientX-t[1].clientX,dy=t[0].clientY-t[1].clientY; return Math.hypot(dx,dy); }
+function mid(t){ return {x:(t[0].clientX+t[1].clientX)/2, y:(t[0].clientY+t[1].clientY)/2}; }
+
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2000); }
+
+// ---- 初期化 ----
+function init(){
+  buildPalette(); draw(); applyTransform();
+  $("myCount").textContent=myCount.toLocaleString();
+  setTimeout(()=>{ $("canvasHint").classList.add("show"); setTimeout(()=>$("canvasHint").classList.remove("show"),3500); },500);
+  setInterval(updateCooldown,500); updateCooldown();
+
+  // Firebaseのpixelsを購読
+  onValue(ref(db,"canvas/pixels"), snap=>{
+    const val=snap.val();
+    if(val){
+      // valは{idx:color}の連想 or 配列
+      if(Array.isArray(val)){ val.forEach((c,i)=>{ if(c!=null) pixels[i]=c; }); }
+      else { Object.entries(val).forEach(([i,c])=>{ const idx=parseInt(i); if(idx>=0&&idx<pixels.length&&c!=null) pixels[idx]=c; }); }
+    }
+    draw();
+    $("status").textContent="接続済み · 全世界とリアルタイム共有";
+  }, err=>{ $("status").textContent="接続エラー: Firebase設定を確認してください"; });
+}
+init();
+</script>
+</body>
+</html>
