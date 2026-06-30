@@ -10,9 +10,7 @@
       ".write": true,
       "$tid": { ".read": true, ".write": true }
     },
-    "canvas": {
-      ".read": true,
-      ".write": true
-    }
+    "canvas": { ".read": true, ".write": true },
+    "emojiquiz": { ".read": true, ".write": true }
   }
 }
